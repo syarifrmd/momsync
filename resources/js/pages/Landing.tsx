@@ -1,5 +1,6 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import welcomeImage from '../../images/welcome.svg';
 import { careMom, login } from '@/routes';
@@ -7,6 +8,33 @@ import { careMom, login } from '@/routes';
 export default function Landing() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { auth } = usePage<any>().props;
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [showInstallButton, setShowInstallButton] = useState(false);
+
+    useEffect(() => {
+        const handler = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+            setShowInstallButton(true);
+        };
+
+        window.addEventListener('beforeinstallprompt', handler);
+
+        return () => window.removeEventListener('beforeinstallprompt', handler);
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) return;
+
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+
+        if (outcome === 'accepted') {
+            setShowInstallButton(false);
+        }
+
+        setDeferredPrompt(null);
+    };
 
     const features = [
         "Informasi & edukasi kesehatan",
@@ -90,6 +118,25 @@ export default function Landing() {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* PWA Install Button */}
+                            {showInstallButton && (
+                                <div className="mb-4">
+                                    <Button 
+                                        onClick={handleInstallClick}
+                                        variant="outline"
+                                        className="w-full h-12 border-2 border-purple-300 text-purple-700 hover:bg-purple-50 rounded-full font-semibold flex items-center justify-center gap-2 group"
+                                    >
+                                        <div className="w-6 h-6 bg-linear-to-br from-pink-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                            <svg viewBox="0 0 24 24" fill="white" className="w-4 h-4">
+                                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                            </svg>
+                                        </div>
+                                        Install Aplikasi
+                                        <Download className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+                                    </Button>
+                                </div>
+                            )}
 
                             <Link href={auth.user ? careMom() : login()} className="block">
                                 <Button className="w-full h-14 lg:h-16 bg-linear-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white rounded-full text-lg lg:text-xl font-bold shadow-xl shadow-pink-200 active:scale-95 transition-all flex items-center justify-center gap-2 group">

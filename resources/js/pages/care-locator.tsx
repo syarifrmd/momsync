@@ -1,207 +1,357 @@
-import { Clock, MapPin, Navigation, Phone, Search, Star } from "lucide-react";
-import { useState } from "react";
+import { Building2, Clock, Filter, Loader2, MapPin, Navigation, Phone, Search, Target } from "lucide-react";
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
 
-import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import MobileNav from "../components/MobileNav";
 
-interface HealthFacility {
-  id: number;
+interface Hospital {
+  code: string;
   name: string;
-  type: string;
   address: string;
-  distance: string;
-  phone: string;
-  hours: string;
-  rating: number;
-  services: string[];
-  image?: string;
+  phone: string | null;
+  type: string;
+  class: string;
+  ownership: string;
+  facilities: {
+    total_beds: number;
+    land_area: string;
+    building_area: string;
+  };
+  services: {
+    count: number;
+    list: string[];
+  };
+  province_code: string;
+  regency_code: string;
 }
 
-const facilities: HealthFacility[] = [
-  {
-    id: 1,
-    name: "RS Bunda Jakarta",
-    type: "Rumah Sakit",
-    address: "Jl. Teuku Cik Ditiro No. 28, Menteng, Jakarta Pusat",
-    distance: "1.2 km",
-    phone: "(021) 3192-2005",
-    hours: "24 Jam",
-    rating: 4.7,
-    services: ["Kandungan", "Anak", "Bersalin", "NICU"],
-    image: "https://images.unsplash.com/photo-1626315869436-d6781ba69d6e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxob3NwaXRhbCUyMGJ1aWxkaW5nfGVufDF8fHx8MTc2ODY1ODU2N3ww&ixlib=rb-4.1.0&q=80&w=1080"
-  },
-  {
-    id: 2,
-    name: "Klinik Ibu & Anak Sehat",
-    type: "Klinik",
-    address: "Jl. Sudirman No. 45, Tanah Abang, Jakarta Pusat",
-    distance: "2.5 km",
-    phone: "(021) 5720-8899",
-    hours: "08:00 - 20:00",
-    rating: 4.5,
-    services: ["Kandungan", "Anak", "Imunisasi"]
-  },
-  {
-    id: 3,
-    name: "RS Hermina Kemayoran",
-    type: "Rumah Sakit",
-    address: "Jl. Angkasa Kav. 1, Kemayoran, Jakarta Pusat",
-    distance: "5.0 km",
-    phone: "(021) 654-2020",
-    hours: "24 Jam",
-    rating: 4.6,
-    services: ["Kandungan", "Anak", "Bedah", "Poli Mata"],
-    image: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxob3NwaXRhbHxlbnwwfHx8fDE3Njg2NTg1Njd8MA&ixlib=rb-4.1.0&q=80&w=1080"
-  },
-  {
-    id: 4,
-    name: "Puskesmas Menteng",
-    type: "Puskesmas",
-    address: "Jl. Pegangsaan Barat No. 14, Menteng, Jakarta Pusat",
-    distance: "0.8 km",
-    phone: "(021) 3190-2345",
-    hours: "07:30 - 16:00",
-    rating: 4.2,
-    services: ["Umum", "KIA", "Gigi"]
-  }
-];
+interface ApiResponse {
+  is_success: boolean;
+  message: string;
+  data: Hospital[];
+  paging?: {
+    page: number;
+    size: number;
+    total_item: number;
+    total_page: number;
+  };
+}
+
+// Province codes mapping for major cities in Indonesia
+const PROVINCE_CODES: Record<string, string> = {
+  'Jakarta': '31',
+  'Jawa Barat': '32',
+  'Jawa Tengah': '33',
+  'Jawa Timur': '35',
+  'Banten': '36',
+  'Bali': '51',
+  'Sumatera Utara': '12',
+  'Sumatera Barat': '13',
+  'Sulawesi Selatan': '73',
+};
 
 export default function CareLocator() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<"map" | "list">("list");
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedProvince, setSelectedProvince] = useState<string>("all"); // Default to All
+  const [selectedClass, setSelectedClass] = useState<string>("all");
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const filteredFacilities = facilities.filter(f => 
-    f.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    f.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    fetchHospitals();
+  }, [page]);
+
+  const fetchHospitals = async (pageOverride?: number) => {
+    const queryPage = typeof pageOverride === 'number' ? pageOverride : page;
+    setLoading(true);
+    try {
+      const params: any = {
+        page: queryPage,
+        size: 20,
+      };
+
+      if (searchTerm) params.name = searchTerm;
+      if (selectedProvince && selectedProvince !== 'all') params.province_code = selectedProvince;
+      if (selectedClass && selectedClass !== 'all') params.class = selectedClass;
+
+      const response = await axios.get<ApiResponse>('/locator/search', { params });
+      
+      if (response.data.is_success) {
+        setHospitals(response.data.data || []);
+        if (response.data.paging) {
+          setTotalPages(response.data.paging.total_page);
+        }
+      } else {
+        toast.error(response.data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
+      toast.error('Gagal mengambil data rumah sakit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = () => {
+    if (page === 1) {
+      fetchHospitals(1);
+    } else {
+      setPage(1);
+    }
+  };
+
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      setLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          // For MVP, default to Jakarta if location is obtained
+          // In production, you'd reverse geocode to get province/regency codes
+          setSelectedProvince(PROVINCE_CODES['Jakarta']);
+          toast.success("Lokasi berhasil dideteksi");
+          setLoading(false);
+          fetchHospitals();
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          toast.error('Gagal mendapatkan lokasi Anda');
+          setLoading(false);
+        }
+      );
+    } else {
+      toast.error('Browser tidak mendukung geolocation');
+    }
+  };
+
+  const openPhone = (phone: string | null) => {
+    if (phone) {
+      window.open(`tel:${phone}`, '_self');
+    } else {
+      toast.error('Nomor telepon tidak tersedia');
+    }
+  };
+
+  const openMaps = (address: string, name: string) => {
+    const query = encodeURIComponent(`${name}, ${address}`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20"> {/* Added pb-20 for MobileNav */}
-      
+    <div className="min-h-screen bg-slate-50 pb-20">
       {/* Header */}
-      <div className="bg-linear-to-r from-pink-500 to-purple-600 text-white p-4 pb-8 rounded-b-3xl relative shadow-md">
+      <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-4 pb-8 rounded-b-3xl relative shadow-md">
         <h1 className="text-xl font-bold mb-1">Care Locator</h1>
-        <p className="text-pink-100 text-sm mb-4">Temukan layanan kesehatan terdekat</p>
+        <p className="text-pink-100 text-sm mb-4">Temukan rumah sakit terdekat</p>
         
-        {/* Search Bar - Floating */}
+        {/* Search Bar */}
         <div className="absolute -bottom-6 left-4 right-4 shadow-lg">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <Input 
-              className="pl-9 h-12 rounded-xl bg-white border-none text-black" 
-              placeholder="Cari RS, Klinik, atau Dokter..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Input 
+                className="pl-9 h-12 rounded-xl bg-white border-none text-black" 
+                placeholder="Cari nama rumah sakit..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+            </div>
+            <Button 
+              className="h-12 bg-white text-pink-600 hover:bg-pink-50"
+              onClick={handleSearch}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
           </div>
         </div>
       </div>
 
-      <div className="mt-10 px-4">
-        {/* Toggle Tabs */}
-        <div className="flex bg-slate-200 p-1 rounded-xl mb-6">
-          <button 
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'list' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-            onClick={() => setActiveTab('list')}
-          >
-            Daftar
-          </button>
-          <button 
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'map' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-            onClick={() => setActiveTab('map')}
-          >
-            Peta
-          </button>
-        </div>
-
-        {activeTab === 'list' ? (
-          <div className="space-y-4">
-            {filteredFacilities.map((facility) => (
-              <Card key={facility.id} className="overflow-hidden border-none shadow-sm">
-                {facility.image && (
-                  <div className="h-32 w-full relative">
-                      <ImageWithFallback 
-                        src={facility.image} 
-                        alt={facility.name}
-                        className="w-full h-full object-cover"
-                      />
-                      <Badge className="absolute top-2 right-2 bg-white/90 text-slate-800 hover:bg-white/90">
-                        {facility.distance}
-                      </Badge>
-                  </div>
-                )}
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-bold text-slate-800">{facility.name}</h3>
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                        {facility.type}
-                      </span>
-                    </div>
-                    {!facility.image && ( // Show distance here if no image
-                         <Badge variant="secondary" className="text-slate-600">
-                           {facility.distance}
-                         </Badge>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2 text-sm text-slate-600 mb-4">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 mt-0.5 text-pink-500 shrink-0" />
-                      <span className="line-clamp-2">{facility.address}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>{facility.hours}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4 text-amber-500 shrink-0 fill-amber-500" />
-                      <span>{facility.rating} / 5.0</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {facility.services.slice(0, 3).map((service, idx) => (
-                      <span key={idx} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-1 rounded-md">
-                        {service}
-                      </span>
-                    ))}
-                    {facility.services.length > 3 && (
-                        <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-1 rounded-md">
-                            +{facility.services.length - 3} lainnya
-                        </span>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button className="flex-1 bg-white border border-pink-200 text-pink-600 hover:bg-pink-50" size="sm">
-                      <Phone className="w-4 h-4 mr-2" />
-                      Telepon
-                    </Button>
-                    <Button className="flex-1 bg-pink-600 hover:bg-pink-700 text-white" size="sm">
-                      <Navigation className="w-4 h-4 mr-2" />
-                      Rute
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
+      <div className="mt-10 px-4 space-y-4">
+        {/* Location & Filters */}
+        <Card className="p-4 border-none shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              Filter & Lokasi
+            </h3>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 text-xs border-emerald-200 text-emerald-600"
+              onClick={getUserLocation}
+              disabled={loading}
+            >
+              <Target className="w-3 h-3 mr-1" />
+              Lokasi Saya
+            </Button>
           </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-600 mb-1 block">Provinsi</label>
+              <Select value={selectedProvince} onValueChange={setSelectedProvince}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Semua" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Provinsi</SelectItem>
+                  {Object.entries(PROVINCE_CODES).map(([name, code]) => (
+                    <SelectItem key={code} value={code}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs text-slate-600 mb-1 block">Kelas</label>
+              <Select value={selectedClass} onValueChange={setSelectedClass}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Semua" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Kelas</SelectItem>
+                  <SelectItem value="A">Kelas A</SelectItem>
+                  <SelectItem value="B">Kelas B</SelectItem>
+                  <SelectItem value="C">Kelas C</SelectItem>
+                  <SelectItem value="D">Kelas D</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </Card>
+
+        {/* Results */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+          </div>
+        ) : hospitals.length === 0 ? (
+          <Card className="p-8 text-center">
+            <Building2 className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <p className="text-slate-500 font-medium">Tidak ada rumah sakit ditemukan</p>
+            <p className="text-xs text-slate-400 mt-1">Coba ubah filter pencarian Anda</p>
+          </Card>
         ) : (
-          <div className="h-125 bg-slate-200 rounded-xl flex items-center justify-center relative overflow-hidden">
-             {/* Map Placeholder */}
-             <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/OpenStreetMap_Logo_2011.svg/1024px-OpenStreetMap_Logo_2011.svg.png')] bg-cover opacity-20 bg-center"></div>
-             <div className="relative z-10 text-center p-6 bg-white/80 rounded-xl backdrop-blur-sm mx-4">
-                <MapPin className="w-10 h-10 text-pink-600 mx-auto mb-2 animate-bounce" />
-                <h3 className="font-bold text-slate-800">Tampilan Peta Interaktif</h3>
-                <p className="text-sm text-slate-600">Integrasi Peta akan segera tersedia di versi selanjutnya.</p>
-             </div>
-          </div>
+          <>
+            <div className="space-y-4">
+              {hospitals.map((hospital) => (
+                <Card key={hospital.code} className="overflow-hidden border-none shadow-sm">
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <h3 className="font-bold text-slate-800 line-clamp-2">{hospital.name}</h3>
+                        <div className="flex gap-2 mt-1">
+                          <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px]">
+                            {hospital.type}
+                          </Badge>
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">
+                            Kelas {hospital.class}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm text-slate-600 mb-3">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-4 h-4 mt-0.5 text-pink-500 shrink-0" />
+                        <span className="line-clamp-2">{hospital.address}</span>
+                      </div>
+                      {hospital.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>{hospital.phone}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                        <span>{hospital.facilities?.total_beds || '-'} Tempat Tidur</span>
+                      </div>
+                    </div>
+
+                    {hospital.services?.list?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {hospital.services.list.slice(0, 3).map((service, idx) => (
+                          <span key={idx} className="text-[10px] bg-pink-50 text-pink-600 px-2 py-1 rounded-md">
+                            {service}
+                          </span>
+                        ))}
+                        {hospital.services.list.length > 3 && (
+                          <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-1 rounded-md">
+                            +{hospital.services.list.length - 3} layanan
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button 
+                        className="flex-1 bg-white border border-pink-200 text-pink-600 hover:bg-pink-50" 
+                        size="sm"
+                        onClick={() => openPhone(hospital.phone)}
+                      >
+                        <Phone className="w-4 h-4 mr-1" />
+                        Telepon
+                      </Button>
+                      <Button 
+                        className="flex-1 bg-pink-600 hover:bg-pink-700 text-white" 
+                        size="sm"
+                        onClick={() => openMaps(hospital.address, hospital.name)}
+                      >
+                        <Navigation className="w-4 h-4 mr-1" />
+                        Rute
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 pt-4">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  disabled={page === 1 || loading}
+                  onClick={() => {
+                    setPage(page - 1);
+                    fetchHospitals();
+                  }}
+                >
+                  Sebelumnya
+                </Button>
+                <span className="text-sm text-slate-600">
+                  Halaman {page} dari {totalPages}
+                </span>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  disabled={page === totalPages || loading}
+                  onClick={() => {
+                    setPage(page + 1);
+                    fetchHospitals();
+                  }}
+                >
+                  Berikutnya
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

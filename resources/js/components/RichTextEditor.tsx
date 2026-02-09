@@ -1,8 +1,9 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Bold, Italic, List, ListOrdered, Quote, Undo, Redo, Link as LinkIcon } from 'lucide-react'
+import { Bold, Italic, List, ListOrdered, Quote, ImageIcon, Undo, Redo } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface RichTextEditorProps {
@@ -22,6 +23,10 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Write something...', c
                     class: 'text-pink-600 hover:text-pink-700 underline',
                 },
             }),
+            Image.configure({
+                inline: true,
+                allowBase64: true,
+            }),
             Placeholder.configure({
                 placeholder,
             }),
@@ -29,13 +34,22 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Write something...', c
         content: value,
         editorProps: {
             attributes: {
-                class: 'prose prose-sm sm:prose-base focus:outline-hidden min-h-[150px] px-3 py-2',
+                class: 'prose prose-pink prose-sm sm:prose-base focus:outline-hidden min-h-[150px] px-3 py-2 max-w-none [&_img]:rounded-lg [&_img]:shadow-sm',
             },
         },
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML())
         },
     })
+
+    const addImage = () => {
+        const url = window.prompt('URL')
+
+        if (url) {
+            editor?.chain().focus().setImage({ src: url }).run()
+        }
+    }
+
 
     if (!editor) {
         return null
@@ -97,6 +111,14 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Write something...', c
                     )}
                 >
                     <Quote className="w-4 h-4" />
+                </button>
+                <button
+                    type="button"
+                    onClick={addImage}
+                    className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                    title="Insert Image URL"
+                >
+                    <ImageIcon className="w-4 h-4" />
                 </button>
                 <div className="ml-auto flex items-center gap-1">
                     <button

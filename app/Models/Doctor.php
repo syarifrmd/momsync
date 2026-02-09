@@ -15,10 +15,19 @@ class Doctor extends Model
         'str_number',
         'is_online',
         'hospital_name',
+        'whatsapp_number',
+        'bio',
+        'photo',
+        'consultation_fee',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function consultations()
+    {
+        return $this->hasMany(Consultation::class);
     }
 }

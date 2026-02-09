@@ -1,12 +1,14 @@
 import axios from "axios";
 import { Bot, Send, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-
+import { chat } from "@/routes/assistant";
 import MobileNav from "../components/MobileNav";
 
 interface Message {
@@ -52,7 +54,7 @@ export default function HealthAssistant({ initialMessages, sessionId: initialSes
     setInputText(""); // clear input early
 
     try {
-      const response = await axios.post(route('assistant.chat'), {
+      const response = await axios.post(chat().url, {
           message: currentInput,
           session_id: sessionId
       });
@@ -71,11 +73,26 @@ export default function HealthAssistant({ initialMessages, sessionId: initialSes
       };
 
       setMessages((prev) => [...prev, aiMsg]);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error("Chat Error:", error);
+      let errorMessage = "Maaf, terjadi kesalahan jaringan. Silakan coba lagi.";
+      
+      if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          if (error.response.data && error.response.data.message) {
+              errorMessage = `Error: ${error.response.data.message}`;
+          } else {
+              errorMessage = `Error: Server returned status ${error.response.status}`;
+          }
+      } else if (error.request) {
+          // The request was made but no response was received
+          errorMessage = "Error: Tidak ada respon dari server (Network Error).";
+      }
+
       setMessages((prev) => [...prev, {
           id: Date.now() + 1,
-          message: "Maaf, terjadi kesalahan jaringan. Silakan coba lagi.",
+          message: errorMessage,
           sender: "ai"
       }]);
     } finally {
@@ -126,7 +143,38 @@ export default function HealthAssistant({ initialMessages, sessionId: initialSes
                   ? "bg-pink-500 text-white rounded-tr-none" 
                   : "bg-white text-slate-700 rounded-tl-none border-slate-200"
               }`}>
-                {msg.message}
+                {msg.sender === "ai" ? (
+                  <div className="markdown-content">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({children}) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+                        h1: ({children}) => <h1 className="text-lg font-bold text-teal-700 mb-2">{children}</h1>,
+                        h2: ({children}) => <h2 className="text-base font-bold text-teal-700 mb-2 mt-3">{children}</h2>,
+                        h3: ({children}) => <h3 className="text-sm font-semibold text-teal-700 mb-2 mt-2">{children}</h3>,
+                        ul: ({children}) => <ul className="space-y-1.5 list-disc pl-5 mb-3">{children}</ul>,
+                        ol: ({children}) => <ol className="space-y-1.5 list-decimal pl-5 mb-3">{children}</ol>,
+                        li: ({children}) => <li className="leading-relaxed">{children}</li>,
+                        strong: ({children}) => <strong className="font-bold text-teal-800">{children}</strong>,
+                        em: ({children}) => <em className="italic">{children}</em>,
+                        blockquote: ({children}) => (
+                          <blockquote className="border-l-4 border-teal-500 bg-teal-50 pl-3 py-2 my-3 italic text-slate-600">
+                            {children}
+                          </blockquote>
+                        ),
+                        code: ({children}) => (
+                          <code className="bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded text-xs font-mono">
+                            {children}
+                          </code>
+                        ),
+                      }}
+                    >
+                      {msg.message}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  msg.message
+                )}
               </Card>
             </div>
           </div>

@@ -1,11 +1,14 @@
 import { Link, usePage } from "@inertiajs/react";
-import { Heart, User, Video, MessageSquare, Bot, FileText, Calendar } from "lucide-react";
+import { Heart, User, Video, MessageSquare, Bot, FileText, Calendar, Home, Users, BarChart3 } from "lucide-react";
 
 export default function MobileNav() {
-  const { url, auth } = usePage<any>().props;
+  const { url, props } = usePage<any>();
+  const { auth } = props;
+  
   // Safely access user role, default to guest/user if confusing
   const user = auth?.user;
   const isDoctor = user?.role === 'doctor';
+  const isAdmin = user?.role === 'admin';
 
   const userItems = [
     { label: "Care", icon: Heart, href: "/care-mom", activeMatch: "/care-mom" },
@@ -21,13 +24,20 @@ export default function MobileNav() {
   ];
 
   const doctorItems = [
-    { label: "Care", icon: Heart, href: "/care-mom", activeMatch: "/care-mom" },
-    { label: "Diskusi", icon: MessageSquare, href: "/forum", activeMatch: "/forum" },
-    { label: "Jadwal", icon: Calendar, href: "/doctor/consultations", activeMatch: "/doctor/consultations" },
+    { label: "Beranda", icon: Home, href: "/care-mom", activeMatch: "/care-mom" },
+    { label: "Forum", icon: MessageSquare, href: "/forum", activeMatch: "/forum" },
+    { label: "Konsul", icon: Calendar, href: "/doctor/consultations", activeMatch: "/doctor/consultations" },
     { label: "Artikel", icon: FileText, href: "/doctor/articles", activeMatch: "/doctor/articles" },
   ];
 
-  const navItems = isDoctor ? doctorItems : finalUserItems;
+  const adminItems = [
+    { label: "Dashboard", icon: BarChart3, href: "/admin/dashboard", activeMatch: "/admin/dashboard" },
+    { label: "Users", icon: Users, href: "/admin/users", activeMatch: "/admin/users" },
+    { label: "Forum", icon: MessageSquare, href: "/forum", activeMatch: "/forum" },
+    { label: "Settings", icon: User, href: "/settings/profile", activeMatch: "/settings" },
+  ];
+
+  const navItems = isAdmin ? adminItems : isDoctor ? doctorItems : finalUserItems;
 
   return (
     <>
@@ -49,17 +59,19 @@ export default function MobileNav() {
         </div>
       </div>
       
-       {/* Floating AI - Optional to hide for doctors if needed */}
-       <div className="fixed bottom-20 right-4 z-50">
-            <Link href="/assistant">
-                <div className="bg-linear-to-r from-teal-400 to-teal-600 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2 pr-4 animate-bounce-slow">
-                    <div className="bg-white/20 p-1.5 rounded-full">
-                        <Bot className="w-6 h-6 text-white" />
+       {/* Floating AI - Only show on care-mom page for non-doctor and non-admin users */}
+       {!isDoctor && !isAdmin && url.startsWith('/care-mom') && (
+            <div className="fixed bottom-20 right-4 z-50">
+                <Link href="/assistant">
+                    <div className="bg-linear-to-r from-teal-400 to-teal-600 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2 pr-4 animate-bounce-slow">
+                        <div className="bg-white/20 p-1.5 rounded-full">
+                            <Bot className="w-6 h-6 text-white" />
+                        </div>
+                        <span className="font-semibold text-sm">Tanya AI</span>
                     </div>
-                    <span className="font-semibold text-sm">Tanya AI</span>
-                </div>
-            </Link>
-       </div>
+                </Link>
+           </div>
+       )}
     </>
   );
 }

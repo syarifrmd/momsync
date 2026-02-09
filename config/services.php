@@ -39,4 +39,8 @@ return [
         'api_key' => env('GEMINI_API_KEY'),
     ],
 
+    'hospital_api' => [
+        'key' => env('HOSPITAL_API_KEY', 'BQMPcanRMcH3WFsFu9ClUWGJQHUfy1mdbEsLYL4sTh6xmhyKzq'),
+    ],
+
 ];

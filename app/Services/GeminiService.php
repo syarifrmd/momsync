@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Log;
 
 class GeminiService
 {
-    protected string $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+    // Using v1beta with Gemini 2.5 Flash (supports systemInstruction)
+    protected string $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
     protected string $apiKey;
 
     public function __construct()
@@ -23,25 +24,35 @@ class GeminiService
 
         $systemPrompt = $this->buildSystemPrompt($context);
 
-        $response = Http::withHeaders([
+        // withoutVerifying() fixes local development SSL/cURL 60 errors
+        $response = Http::withoutVerifying()->withHeaders([
             'Content-Type' => 'application/json',
         ])->post("{$this->baseUrl}?key={$this->apiKey}", [
             'contents' => [
                 [
                     'role' => 'user',
                     'parts' => [
-                        ['text' => $systemPrompt . "\n\nUser Question: " . $userMessage]
+                        ['text' => $userMessage]
                     ]
+                ]
+            ],
+            'systemInstruction' => [
+                'parts' => [
+                    ['text' => $systemPrompt]
                 ]
             ],
             'generationConfig' => [
                 'temperature' => 0.7,
-                'maxOutputTokens' => 500,
+                'maxOutputTokens' => 2048,
             ]
         ]);
 
         if ($response->failed()) {
-            Log::error('Gemini API Error', ['body' => $response->body()]);
+            Log::error('Gemini API Error', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'message' => $userMessage
+            ]);
             return "Maaf, saya sedang mengalami gangguan. Silakan coba lagi nanti.";
         }
 
@@ -77,7 +88,14 @@ class GeminiService
         2. Be empathetic but professional.
         3. Use the supplied User Profile to personalize advice.
         4. If Risk Level is HIGH, strictly advise visiting a hospital.
-        5. Output Format: Plain text, short paragraphs.
+        5. Output Format: Use Markdown formatting for better readability:
+           - Use **bold** for important points or warnings
+           - Use bullet points (- or *) for lists
+           - Use numbered lists (1. 2. 3.) for steps or sequences
+           - Use > for important notes or quotes
+           - Keep paragraphs short and well-spaced
+           - Use headings (## or ###) for section titles when needed
+        6. Keep responses clear, concise, and well-structured.
         ";
     }
 }

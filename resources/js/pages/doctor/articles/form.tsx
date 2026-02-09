@@ -1,21 +1,25 @@
+import { useState } from "react";
 import { Head, Link, useForm } from "@inertiajs/react";
+import { toast } from "sonner";
 import { ArrowLeft, Save, Upload } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import RichTextEditor from "@/components/RichTextEditor";
-import { useState } from "react";
-import { toast } from "sonner";
+import { index, store, update } from "@/routes/doctor/articles";
+import InputError from "@/components/input-error";
 
 interface Article {
-    id?: number;
+    id: number;
     title: string;
     category: string;
     content: string;
     thumbnail: string | null;
     min_week: number | null;
     max_week: number | null;
+    status: 'published' | 'draft' | 'archived';
 }
 
 interface Props {
@@ -23,7 +27,7 @@ interface Props {
 }
 
 export default function ArticleForm({ article }: Props) {
-    const isEditing = !!article;
+    const isEditing = Boolean(article?.id);
     
     // Initial values
     const { data, setData, post, processing, errors } = useForm({
@@ -31,8 +35,9 @@ export default function ArticleForm({ article }: Props) {
         category: article?.category || 'Umum',
         content: article?.content || '',
         thumbnail: null as File | null,
-        min_week: article?.min_week || '',
-        max_week: article?.max_week || '',
+        min_week: article?.min_week !== null && article?.min_week !== undefined ? article.min_week : '',
+        max_week: article?.max_week !== null && article?.max_week !== undefined ? article.max_week : '',
+        status: (article?.status as 'published' | 'draft' | 'archived') || 'draft',
         _method: isEditing ? 'PUT' : 'POST',
     });
 
@@ -49,10 +54,11 @@ export default function ArticleForm({ article }: Props) {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
-        const routeName = isEditing ? 'doctor.articles.update' : 'doctor.articles.store';
-        const routeParams = isEditing ? article.id : undefined;
+        const url = isEditing && article 
+            ? update({ article: article.id }).url 
+            : store().url;
 
-        post(route(routeName, routeParams), {
+        post(url, {
             forceFormData: true,
             onSuccess: () => {
                 toast.success(`Artikel berhasil ${isEditing ? 'diperbarui' : 'dibuat'}`);
@@ -80,7 +86,7 @@ export default function ArticleForm({ article }: Props) {
             <Head title={isEditing ? "Edit Artikel" : "Tambah Artikel Baru"} />
             
             <div className="bg-white p-4 shadow-sm flex items-center gap-2 sticky top-0 z-10">
-                <Link href={route('doctor.articles.index')}>
+                <Link href={index().url}>
                      <ArrowLeft className="h-6 w-6 text-slate-600" />
                 </Link>
                 <h1 className="text-lg font-bold text-slate-800">
@@ -89,7 +95,28 @@ export default function ArticleForm({ article }: Props) {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 space-y-6 max-w-3xl mx-auto">
-                
+                <div className="bg-white p-4 rounded-lg shadow-sm space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                             <Label>Status Artikel</Label>
+                             <Select 
+                                value={data.status} 
+                                onValueChange={(val: any) => setData('status', val)}
+                             >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pilih Status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="draft">Draft</SelectItem>
+                                    <SelectItem value="published">Published</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                </SelectContent>
+                             </Select>
+                             <InputError message={errors.status} />
+                        </div>
+                    </div>
+                </div>
+
                 {/* Image Upload */}
                 <div className="space-y-2">
                     <Label>Thumbnail</Label>

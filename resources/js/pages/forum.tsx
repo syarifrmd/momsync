@@ -1,7 +1,7 @@
-import { Heart, MessageSquare, Plus, Search } from "lucide-react";
+import axios from "axios";
+import { Heart, MessageSquare, Plus, Search, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { usePage } from "@inertiajs/react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,14 @@ import { Label } from "@/components/ui/label";
 import MobileNav from "../components/MobileNav";
 import RichTextEditor from "@/components/RichTextEditor";
 
+interface Comment {
+  id: number;
+  author: string;
+  authorInitial: string;
+  content: string;
+  timestamp: Date | string;
+}
+
 interface Post {
   id: number;
   author: string;
@@ -20,101 +28,125 @@ interface Post {
   title: string;
   content: string;
   category: string;
-  timestamp: Date;
+  timestamp: Date | string;
   likes: number;
   comments: number;
   liked?: boolean;
+  commentsList?: Comment[];
 }
 
-export default function MaternalForum() {
-  const [posts, setPosts] = useState<Post[]>([
-    {
-      id: 1,
-      author: "Sarah Amelia",
-      authorInitial: "SA",
-      title: "Tips mengatasi morning sickness yang ampuh",
-      content: "Hai moms! Mau share pengalaman aku mengatasi mual di trimester 1. Aku makan crackers sebelum bangun tidur dan minum air jahe hangat. Alhamdulillah membantu banget! Ada yang punya tips lain?",
-      category: "Kehamilan",
-      timestamp: new Date(2026, 0, 17, 10, 30),
-      likes: 24,
-      comments: 8
-    },
-    {
-      id: 2,
-      author: "Linda Kusuma",
-      authorInitial: "LK",
-      title: "Rekomendasi bidan yang bagus di Jakarta Selatan",
-      content: "Moms ada yang punya rekomendasi bidan praktek mandiri yang bagus di area Jaksel? Prefer yang ramah dan sabar, karena ini kehamilan pertama aku. Terima kasih!",
-      category: "Rekomendasi",
-      timestamp: new Date(2026, 0, 17, 9, 15),
-      likes: 15,
-      comments: 12
-    },
-    {
-      id: 3,
-      author: "Bunda Azka",
-      authorInitial: "BA",
-      title: "Perkembangan janin 20 minggu",
-      content: "Hari ini habis USG 4D dan seneng banget liat dedek bayi udah aktif nendang-nendang. Dokter bilang beratnya normal. Moms yg lain di 20 weeks sharing dong BBJ nya brp?",
-      category: "Janin",
-      timestamp: new Date(2026, 0, 16, 15, 45),
-      likes: 32,
-      comments: 20
-    }
-  ]);
+interface PageProps {
+  initialPosts: Post[];
+}
 
+export default function MaternalForum({ initialPosts = [] }: PageProps) {
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [searchQuery, setSearchQuery] = useState("");
   const [newPostOpen, setNewPostOpen] = useState(false);
-  const [newPost, setNewPost] = useState({ title: "", content: "", category: "Umum" });
+  const [detailPostOpen, setDetailPostOpen] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [newPost, setNewPost] = useState({ title: "", content: "", category: "Kehamilan" });
+  const [newComment, setNewComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreatePost = () => {
-    if (!newPost.title || !newPost.content) return;
+  const handleCreatePost = async () => {
+    if (!newPost.title || !newPost.content || isSubmitting) return;
     
-    // Simulate current user
-    const { auth } = usePage<any>().props;
-    const authorName = auth.user ? auth.user.name : "Pengguna";
-    const authorInitials = authorName.split(' ').map((n:any) => n[0]).join('').substring(0, 2).toUpperCase();
-
-    setPosts([
-      {
-        id: Date.now(),
-        author: authorName,
-        authorInitial: authorInitials,
-        ...newPost,
-        timestamp: new Date(),
-        likes: 0,
-        comments: 0
-      },
-      ...posts
-    ]);
-    setNewPostOpen(false);
-    setNewPost({ title: "", content: "", category: "Umum" });
-    toast.success("Diskusi berhasil dibuat!");
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post("/forum/posts", newPost);
+      
+      setPosts([response.data.post, ...posts]);
+      setNewPostOpen(false);
+      setNewPost({ title: "", content: "", category: "Kehamilan" });
+      toast.success("Diskusi berhasil dibuat!");
+    } catch (error: any) {
+      console.error("Error creating post:", error);
+      toast.error(error.response?.data?.message || "Gagal membuat diskusi");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleLike = (id: number) => {
-    setPosts(posts.map(post => {
-      if (post.id === id) {
-        return {
-          ...post,
-          likes: post.liked ? post.likes - 1 : post.likes + 1,
-          liked: !post.liked
-        };
+  const handleLike = async (id: number) => {
+    try {
+      const response = await axios.post(`/forum/posts/${id}/like`);
+      
+      setPosts(posts.map(post => 
+        post.id === id
+          ? { ...post, liked: response.data.liked, likes: response.data.likes_count }
+          : post
+      ));
+
+      if (selectedPost && selectedPost.id === id) {
+        setSelectedPost({
+          ...selectedPost,
+          liked: response.data.liked,
+          likes: response.data.likes_count
+        });
       }
-      return post;
-    }));
+    } catch (error: any) {
+      console.error("Error liking post:", error);
+      toast.error("Gagal menyukai postingan");
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !selectedPost || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post(`/forum/posts/${selectedPost.id}/comment`, {
+        content: newComment
+      });
+
+      const updatedPost = {
+        ...selectedPost,
+        commentsList: [response.data.comment, ...(selectedPost.commentsList || [])],
+        comments: response.data.comments_count
+      };
+      setSelectedPost(updatedPost);
+
+      setPosts(posts.map(post => 
+        post.id === selectedPost.id
+          ? { ...post, comments: response.data.comments_count }
+          : post
+      ));
+
+      setNewComment("");
+      toast.success("Komentar berhasil ditambahkan!");
+    } catch (error: any) {
+      console.error("Error adding comment:", error);
+      toast.error("Gagal menambahkan komentar");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openPostDetail = async (post: Post) => {
+    try {
+      const response = await axios.get(`/forum/posts/${post.id}`);
+      setSelectedPost(response.data);
+      setDetailPostOpen(true);
+    } catch (error) {
+      console.error("Error fetching post details:", error);
+      toast.error("Gagal memuat detail postingan");
+    }
   };
 
   const categories = ["Semua", "Kehamilan", "Janin", "Nutrisi", "Rekomendasi", "Curhat"];
 
+  const filteredPosts = posts.filter(post => 
+    (searchQuery === "" || post.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
-       {/* Header */}
-       <div className="bg-linear-to-r from-pink-500 to-purple-600 text-white p-4 pb-8 rounded-b-3xl relative shadow-md">
+       <div className="bg-gradient-to-r from-pink-500 to-purple-600 text-white p-4 pb-8 rounded-b-3xl relative shadow-md">
         <h1 className="text-xl font-bold mb-1">Forum Bunda</h1>
         <p className="text-pink-100 text-sm mb-4">Berbagi pengalaman dengan sesama ibu</p>
         
-        {/* Search Bar */}
         <div className="absolute -bottom-6 left-4 right-4 shadow-lg">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -129,7 +161,6 @@ export default function MaternalForum() {
       </div>
 
       <div className="mt-10 px-4 space-y-4">
-        {/* Categories */}
         <div className="flex gap-2 overflow-x-auto pb-2 noscrollbar">
            {categories.map((cat) => (
              <Badge key={cat} variant="outline" className="bg-white hover:bg-pink-50 cursor-pointer border-slate-200 px-3 py-1.5 whitespace-nowrap">
@@ -138,14 +169,13 @@ export default function MaternalForum() {
            ))}
         </div>
 
-        {/* FAB for New Post */}
         <Dialog open={newPostOpen} onOpenChange={setNewPostOpen}>
             <DialogTrigger asChild>
                 <Button className="fixed bottom-24 right-4 h-14 w-14 rounded-full shadow-xl bg-pink-600 hover:bg-pink-700 z-10 flex items-center justify-center">
                     <Plus className="w-6 h-6 text-white" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md top-[20%] translate-y-0">
+            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Buat Diskusi Baru</DialogTitle>
                 </DialogHeader>
@@ -177,14 +207,118 @@ export default function MaternalForum() {
                             onChange={(content) => setNewPost({ ...newPost, content: content })}
                         />
                     </div>
-                    <Button onClick={handleCreatePost} className="w-full bg-pink-600">Posting</Button>
+                    <Button 
+                      onClick={handleCreatePost} 
+                      className="w-full bg-pink-600"
+                      disabled={isSubmitting || !newPost.title || !newPost.content}
+                    >
+                      {isSubmitting ? "Memposting..." : "Posting"}
+                    </Button>
                 </div>
             </DialogContent>
         </Dialog>
 
-        {/* Posts List */}
-        {posts.map((post) => (
-            <Card key={post.id} className="p-4 border-none shadow-sm space-y-3">
+        <Dialog open={detailPostOpen} onOpenChange={setDetailPostOpen}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                {selectedPost && (
+                    <div className="space-y-4">
+                        <DialogHeader>
+                            <DialogTitle className="text-lg">{selectedPost.title}</DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="bg-pink-100 text-pink-600 text-xs">
+                                        {selectedPost.authorInitial}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <p className="text-sm font-semibold">{selectedPost.author}</p>
+                                    <p className="text-xs text-slate-400">
+                                        {new Date(selectedPost.timestamp).toLocaleDateString()} • {selectedPost.category}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <div 
+                                className="text-sm text-slate-700 prose prose-sm max-w-none [&_p]:mb-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-4 [&_ol]:pl-4"
+                                dangerouslySetInnerHTML={{ __html: selectedPost.content }}
+                            />
+
+                            <div className="flex items-center gap-4 pt-2 border-t">
+                                <button 
+                                    onClick={() => handleLike(selectedPost.id)}
+                                    className={`flex items-center gap-1.5 text-sm font-medium ${selectedPost.liked ? 'text-pink-600' : 'text-slate-500'}`}
+                                >
+                                    <Heart className={`w-5 h-5 ${selectedPost.liked ? 'fill-pink-600' : ''}`} />
+                                    {selectedPost.likes}
+                                </button>
+                                <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+                                    <MessageSquare className="w-5 h-5" />
+                                    {selectedPost.comments}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-4 space-y-4">
+                            <h3 className="font-semibold text-slate-800">Komentar ({selectedPost.comments})</h3>
+                            
+                            <div className="flex gap-2">
+                                <Input 
+                                    placeholder="Tulis komentar..." 
+                                    value={newComment}
+                                    onChange={(e) => setNewComment(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
+                                    disabled={isSubmitting}
+                                />
+                                <Button 
+                                    size="icon"
+                                    onClick={handleAddComment}
+                                    className="bg-pink-600 hover:bg-pink-700"
+                                    disabled={isSubmitting || !newComment.trim()}
+                                >
+                                    <Send className="w-4 h-4" />
+                                </Button>
+                            </div>
+
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                                {selectedPost.commentsList && selectedPost.commentsList.length > 0 ? (
+                                    selectedPost.commentsList.map((comment) => (
+                                        <div key={comment.id} className="flex gap-2 p-3 bg-slate-50 rounded-lg">
+                                            <Avatar className="h-7 w-7 mt-0.5">
+                                                <AvatarFallback className="bg-purple-100 text-purple-600 text-xs">
+                                                    {comment.authorInitial}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <p className="text-sm font-semibold text-slate-800">{comment.author}</p>
+                                                    <p className="text-xs text-slate-400">
+                                                        {new Date(comment.timestamp).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                                <p className="text-sm text-slate-600">{comment.content}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center text-sm text-slate-400 py-4">Belum ada komentar</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+
+        {filteredPosts.length > 0 ? (
+          filteredPosts.map((post) => (
+            <Card 
+              key={post.id} 
+              className="p-4 border-none shadow-sm space-y-3 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => openPostDetail(post)}
+            >
                 <div className="flex items-start justify-between">
                     <div className="flex gap-2 items-center">
                         <Avatar className="h-8 w-8">
@@ -195,7 +329,7 @@ export default function MaternalForum() {
                         <div>
                             <p className="text-sm font-semibold text-slate-800">{post.author}</p>
                             <p className="text-[10px] text-slate-400">
-                                {post.timestamp.toLocaleDateString([], { day: 'numeric', month: 'short' })} • {post.category}
+                                {new Date(post.timestamp).toLocaleDateString()} • {post.category}
                             </p>
                         </div>
                     </div>
@@ -211,19 +345,27 @@ export default function MaternalForum() {
 
                 <div className="flex items-center gap-4 border-t pt-3 mt-1">
                     <button 
-                        onClick={() => handleLike(post.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLike(post.id);
+                        }}
                         className={`flex items-center gap-1.5 text-xs font-medium ${post.liked ? 'text-pink-600' : 'text-slate-500'}`}
                     >
                         <Heart className={`w-4 h-4 ${post.liked ? 'fill-pink-600' : ''}`} />
                         {post.likes}
                     </button>
-                    <button className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                         <MessageSquare className="w-4 h-4" />
                         {post.comments}
-                    </button>
+                    </div>
                 </div>
             </Card>
-        ))}
+          ))
+        ) : (
+          <div className="text-center py-10">
+            <p className="text-slate-400">Belum ada postingan</p>
+          </div>
+        )}
       </div>
       
       <MobileNav />

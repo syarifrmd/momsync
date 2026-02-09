@@ -1,6 +1,7 @@
-import { Bell, Calendar, CheckCircle2, Clock, Plus, Trash2 } from "lucide-react";
+import { Bell, Calendar, CheckCircle2, Clock, Plus, Trash2, Heart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Head } from "@inertiajs/react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,33 +22,29 @@ interface Reminder {
   completed?: boolean;
 }
 
-export default function MedicalReminder() {
-  const [reminders, setReminders] = useState<Reminder[]>([
-    {
-      id: 1,
-      title: "Kontrol Kandungan",
-      date: "2026-01-25",
-      time: "10:00",
-      type: "checkup",
-      notes: "Pemeriksaan rutin bulan ke-6"
-    },
-    {
-      id: 2,
-      title: "USG",
-      date: "2026-02-05",
-      time: "14:00",
-      type: "usg",
-      notes: "USG 4D untuk melihat perkembangan janin"
-    },
-    {
-      id: 3,
-      title: "Vaksinasi Tetanus",
-      date: "2026-01-30",
-      time: "09:00",
-      type: "vaccination",
-      notes: "Suntik TT kedua"
-    }
-  ]);
+interface ScheduleItem {
+    week?: number;
+    day?: number;
+    title: string;
+    description: string;
+    date: string;
+    status: 'past' | 'upcoming' | 'future' | 'ongoing' | 'completed';
+    type: 'medical' | 'daily' | 'milestone';
+}
+
+interface UserProfile {
+    stage: string;
+    stage_start_date: string;
+}
+
+interface Props {
+    schedule: ScheduleItem[];
+    userProfile: UserProfile | null;
+    currentWeek: number;
+}
+
+export default function MedicalReminder({ schedule = [], userProfile, currentWeek }: Props) {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
 
   const [newReminderOpen, setNewReminderOpen] = useState(false);
   const [newReminder, setNewReminder] = useState({
@@ -104,6 +101,7 @@ export default function MedicalReminder() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
+      <Head title="Jadwal Medis" />
       
        {/* Header */}
        <div className="bg-linear-to-r from-pink-500 to-purple-600 text-white p-6 pb-12 rounded-b-[40px] relative shadow-lg">
@@ -116,28 +114,74 @@ export default function MedicalReminder() {
                 <Bell className="w-6 h-6 text-white" />
             </div>
         </div>
-        
-        {/* Next Schedule Card - Floating */}
-        {reminders.length > 0 && (
-            <div className="absolute -bottom-16 left-4 right-4 bg-white rounded-2xl p-4 shadow-xl border border-slate-100 flex items-center justify-between">
-                <div>
-                     <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Jadwal Berikutnya</p>
-                     <h3 className="font-bold text-slate-800 text-lg">{reminders[0].title}</h3>
-                     <div className="flex items-center gap-2 text-sm text-pink-600 font-medium mt-1">
-                        <Clock className="w-4 h-4" />
-                        {new Date(reminders[0].date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })} • {reminders[0].time}
-                     </div>
-                </div>
-                <div className="h-12 w-1 bg-pink-500 rounded-full"></div>
-            </div>
-        )}
       </div>
 
-      <div className="mt-20 px-4 space-y-4">
-        <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-slate-800">Daftar Pengingat</h3>
+      <div className="mt-6 px-4 space-y-6">
+        {/* Jadwal Medis Otomatis (dari Sistem) */}
+        {schedule.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-pink-600" />
+              <h3 className="font-bold text-slate-800">Jadwal Medis (Otomatis)</h3>
+            </div>
+            <p className="text-xs text-slate-500 -mt-1">Jadwal ini dibuat otomatis berdasarkan profil kesehatan Anda</p>
             
-            <Dialog open={newReminderOpen} onOpenChange={setNewReminderOpen}>
+            <div className="space-y-2">
+              {schedule.map((item, idx) => (
+                <Card key={idx} className={`p-4 border-none shadow-sm ${
+                  item.status === 'past' ? 'bg-slate-50 opacity-60' : 
+                  item.status === 'upcoming' || item.status === 'ongoing' ? 'bg-gradient-to-r from-pink-50 to-purple-50 border-l-4 border-pink-500' : 
+                  'bg-white'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`h-10 w-1 rounded-full ${
+                      item.status === 'upcoming' || item.status === 'ongoing' ? 'bg-pink-500' : 
+                      item.status === 'past' ? 'bg-green-500' : 'bg-slate-300'
+                    }`}></div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h4 className={`font-bold text-slate-800 text-sm ${item.status === 'past' ? 'line-through text-slate-500' : ''}`}>
+                          {item.title}
+                        </h4>
+                        <Badge variant="secondary" className={`text-[10px] shrink-0 ${
+                          item.status === 'upcoming' || item.status === 'ongoing' ? 'bg-pink-100 text-pink-700' :
+                          item.status === 'past' || item.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          {item.status === 'upcoming' ? 'Segera' : 
+                           item.status === 'ongoing' ? 'Berlangsung' :
+                           item.status === 'past' || item.status === 'completed' ? 'Selesai' : 
+                           'Mendatang'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1">{item.description}</p>
+                      <p className="text-xs text-pink-600 flex items-center gap-1 font-medium">
+                        <Calendar className="w-3 h-3" />
+                        {item.date}
+                      </p>
+                    </div>
+
+                    {(item.status === 'past' || item.status === 'completed') && (
+                      <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Pengingat Manual (Bisa Ditambah/Hapus User) */}
+        {/* Pengingat Manual (Bisa Ditambah/Hapus User) */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-slate-800">Pengingat Saya</h3>
+                <p className="text-xs text-slate-500">Tambahkan pengingat pribadi Anda sendiri</p>
+              </div>
+              
+              <Dialog open={newReminderOpen} onOpenChange={setNewReminderOpen}>
                 <DialogTrigger asChild>
                     <Button variant="ghost" size="sm" className="text-pink-600 hover:text-pink-700 hover:bg-pink-50 text-xs font-semibold">
                         <Plus className="w-4 h-4 mr-1" /> Tambah Baru
@@ -195,47 +239,53 @@ export default function MedicalReminder() {
         </div>
 
         {reminders.map((reminder) => (
-            <Card key={reminder.id} className={`p-4 border-none shadow-sm flex items-center gap-4 transition-all ${reminder.completed ? 'opacity-60 bg-slate-50' : 'bg-white'}`}>
-                <button 
-                  onClick={() => handleToggleComplete(reminder.id)}
-                  className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${reminder.completed ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}
-                >
-                    {reminder.completed && <CheckCircle2 className="w-4 h-4 text-white" />}
-                </button>
-                
-                <div className="flex-1">
-                    <div className="flex justify-between items-start mb-1">
-                        <h4 className={`font-bold text-slate-800 ${reminder.completed ? 'line-through text-slate-500' : ''}`}>{reminder.title}</h4>
-                        <Badge variant="secondary" className={`text-[10px] ${getBadgeColor(reminder.type)}`}>
-                            {translateType(reminder.type)}
-                        </Badge>
+            <Card key={reminder.id} className={`p-4 border-none shadow-sm transition-all ${reminder.completed ? 'opacity-60 bg-slate-50' : 'bg-white'}`}>
+                <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <h4 className={`font-bold text-slate-800 text-sm ${reminder.completed ? 'line-through text-slate-500' : ''}`}>{reminder.title}</h4>
+                            <Badge variant="secondary" className={`text-[10px] shrink-0 ${getBadgeColor(reminder.type)}`}>
+                                {translateType(reminder.type)}
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 flex items-center gap-1 mb-1">
+                            <Calendar className="w-3 h-3" />
+                            {reminder.date} • {reminder.time}
+                        </p>
+                        {reminder.notes && (
+                             <p className="text-xs text-slate-400 italic line-clamp-1">{reminder.notes}</p>
+                        )}
                     </div>
-                    <p className="text-xs text-slate-500 flex items-center gap-2 mb-1">
-                        <Calendar className="w-3 h-3" />
-                        {reminder.date} • {reminder.time}
-                    </p>
-                    {reminder.notes && (
-                         <p className="text-xs text-slate-400 italic line-clamp-1">{reminder.notes}</p>
-                    )}
-                </div>
 
-                <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="shrink-0 h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
-                    onClick={() => handleDelete(reminder.id)}
-                >
-                    <Trash2 className="w-4 h-4" />
-                </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button 
+                          onClick={() => handleToggleComplete(reminder.id)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${reminder.completed ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}
+                        >
+                            {reminder.completed && <CheckCircle2 className="w-4 h-4 text-white" />}
+                        </button>
+
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
+                            onClick={() => handleDelete(reminder.id)}
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
             </Card>
         ))}
         
         {reminders.length === 0 && (
-             <div className="text-center py-10 text-slate-400">
-                 <Bell className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                 <p>Belum ada jadwal pengingat.</p>
+             <div className="text-center py-8 text-slate-400 bg-white rounded-xl border-2 border-dashed">
+                 <Plus className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                 <p className="text-sm font-medium">Belum ada pengingat pribadi</p>
+                 <p className="text-xs mt-1">Klik "Tambah Baru" untuk membuat pengingat</p>
              </div>
         )}
+        </div>
       </div>
 
       <MobileNav />

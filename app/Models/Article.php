@@ -18,9 +18,16 @@ class Article extends Model
         'min_week',
         'max_week',
         'risk_tags',
+        'doctor_id',
+        'status',
     ];
 
     protected $casts = [
         'risk_tags' => 'array',
     ];
+
+    public function doctor()
+    {
+        return $this->belongsTo(Doctor::class);
+    }
 }
