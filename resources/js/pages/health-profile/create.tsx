@@ -120,7 +120,14 @@ export default function HealthProfile() {
                    <p className="text-xs text-slate-500">Tutorial & Bantuan</p>
                </div>
            </div>
-           <Button variant="ghost" size="sm" className="text-purple-600">Buka</Button>
+           <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-purple-600"
+            onClick={() => window.open('https://drive.google.com/file/d/1nCLPIssCdAZZ4DMGc0ZDyoDhXgShRUZx/view?usp=sharing', '_blank')}
+           >
+            Buka
+           </Button>
         </Card>
 
         <Tabs defaultValue="personal" className="w-full">
